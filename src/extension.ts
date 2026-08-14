@@ -6,6 +6,8 @@ import * as vscode from 'vscode';
 import * as http from 'http';
 import * as os from 'os';
 import * as childProcess from 'child_process';
+import * as fs from 'fs';
+import * as path from 'path';
 
 const VIEW_TYPE = 'dsh.webui';
 const VIEW_TITLE = 'DSH WebUI';
@@ -33,6 +35,9 @@ let offlineStreak = 0;
 let lastStartAttempt = 0;
 let serverProcess: childProcess.ChildProcess | undefined;
 let serverOutput: vscode.OutputChannel;
+// 本扩展拉起的服务进程 PID 的持久化位置与记录（跨 VS Code 会话，用于清理遗留/孤儿进程）
+let pidFile: string | undefined;
+let trackedPid: number | undefined;
 let dashboard: vscode.WebviewView | undefined;
 const logEntries: LogEntry[] = [];
 
@@ -100,6 +105,10 @@ export function activate(context: vscode.ExtensionContext): void {
     );
   }
 
+  // 接管先前会话遗留的服务进程（PID 记录在 globalStorage，用于关闭时清理孤儿进程）
+  pidFile = vscode.Uri.joinPath(context.globalStorageUri, 'server.pid').fsPath;
+  loadTrackedPid();
+
   log('扩展已激活');
   refreshStatusBar();
   schedulePoll(0);
@@ -110,15 +119,13 @@ export function deactivate(): void {
     clearTimeout(pollTimer);
     pollTimer = undefined;
   }
-  // VS Code 关闭时终止由本扩展拉起的服务进程，避免遗留孤儿进程
-  if (serverProcess) {
-    try {
-      serverProcess.kill();
-    } catch {
-      /* 忽略 */
-    }
-    serverProcess = undefined;
-  }
+  // VS Code 关闭时终止由本扩展拉起的整个服务进程树（shell 及其所有子进程），
+  // 避免仅杀掉外层 shell 而遗留真正的 DSH 服务进程
+  const pid = serverProcess?.pid ?? trackedPid;
+  killServerTree(pid);
+  serverProcess = undefined;
+  trackedPid = undefined;
+  clearPid();
 }
 
 // ---------------------------------------------------------------- 日志中心
@@ -142,7 +149,7 @@ function pushStatus(): void {
     type: 'status',
     online,
     url: getWebuiUrl(),
-    running: serverProcess !== undefined,
+    running: serverProcess !== undefined || (trackedPid !== undefined && isProcessAlive(trackedPid)),
     autoStart: getAutoStart(),
     startCommand: getStartCommandSetting(),
   });
@@ -156,6 +163,88 @@ function getAutoStart(): boolean {
 function getStartCommandSetting(): string {
   const cmd = vscode.workspace.getConfiguration('dsh').get<string>('startCommand', '');
   return (cmd ?? '').trim();
+}
+
+// ------------------------------------------- 服务进程生命周期管理
+
+// 进程是否存活（signal 0 仅探测不发送信号；Windows 上同样安全）
+function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// 从持久化记录中接管上一会话遗留的服务进程
+function loadTrackedPid(): void {
+  if (!pidFile) {
+    return;
+  }
+  try {
+    const raw = fs.readFileSync(pidFile, 'utf8').trim();
+    const pid = Number.parseInt(raw, 10);
+    if (Number.isInteger(pid) && pid > 0 && isProcessAlive(pid)) {
+      trackedPid = pid;
+      log(`检测到先前会话遗留的 DSH 服务进程 (PID ${pid})，本扩展将继续管理它`, 'warn');
+    } else {
+      clearPid(); // 记录已过期
+    }
+  } catch {
+    // 无 PID 记录属正常情况
+  }
+}
+
+function savePid(pid: number): void {
+  if (!pidFile) {
+    return;
+  }
+  try {
+    fs.mkdirSync(path.dirname(pidFile), { recursive: true });
+    fs.writeFileSync(pidFile, String(pid), 'utf8');
+  } catch {
+    /* 忽略 */
+  }
+}
+
+function clearPid(): void {
+  if (!pidFile) {
+    return;
+  }
+  try {
+    fs.rmSync(pidFile, { force: true });
+  } catch {
+    /* 忽略 */
+  }
+}
+
+// 终止整个进程树：
+//  - Windows: taskkill /T 连子孙进程一并结束（spawn(shell:true) 时 kill() 只能杀掉外层 cmd）
+//  - POSIX:   进程以独立进程组启动（detached），向组内广播 SIGTERM
+function killServerTree(pid: number | undefined): boolean {
+  if (!pid || !isProcessAlive(pid)) {
+    return false;
+  }
+  try {
+    if (process.platform === 'win32') {
+      childProcess.execSync(`taskkill /pid ${pid} /T /F`, { windowsHide: true, stdio: 'ignore' });
+    } else {
+      try {
+        process.kill(-pid, 'SIGTERM'); // 进程组
+      } catch {
+        process.kill(pid, 'SIGTERM'); // 无独立进程组时退化为单进程
+      }
+    }
+    return true;
+  } catch {
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* 忽略 */
+    }
+    return false;
+  }
 }
 
 // ---------------------------------------------------------- 侧边栏控制台
@@ -493,6 +582,10 @@ function startServer(source: string): void {
     log('DSH 服务进程已在运行，无需重复启动', 'warn');
     return;
   }
+  if (trackedPid && isProcessAlive(trackedPid)) {
+    log(`先前会话遗留的服务进程 (PID ${trackedPid}) 仍在运行，无需重复启动；如需停止请使用「停止服务」`, 'warn');
+    return;
+  }
   const cmdLine = getStartCommand();
   if (!cmdLine) {
     log('未找到可用的启动命令：请在设置 dsh.startCommand 中配置，例如 "dsh web" 或 "npx @deepseek-ai/dsh web"', 'error');
@@ -510,9 +603,14 @@ function startServer(source: string): void {
       env: { ...process.env, DSH_WEB_URL: getWebuiUrl() },
       shell: true, // 支持 dsh.cmd / npx 等命令
       windowsHide: true, // 不弹出控制台窗口
+      detached: process.platform !== 'win32', // POSIX 下独立进程组，便于整树终止
       stdio: ['ignore', 'pipe', 'pipe'], // stdin 关闭，stdout/stderr 走管道
     });
     serverProcess = proc;
+    if (proc.pid) {
+      trackedPid = proc.pid;
+      savePid(proc.pid);
+    }
     pushStatus();
     log(`[${source}] DSH 服务进程已启动 (PID ${proc.pid ?? '?'})`);
     // 持续消费管道输出（否则子进程会因管道缓冲区写满而阻塞），转存到输出通道
@@ -525,11 +623,15 @@ function startServer(source: string): void {
     proc.on('error', (err: Error) => {
       log(`启动 DSH 服务失败: ${err.message}`, 'error');
       serverProcess = undefined;
+      trackedPid = undefined;
+      clearPid();
       pushStatus();
     });
     proc.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
       serverOutput.appendLine(`[DSH] 服务进程退出 (code=${code} signal=${signal})`);
       serverProcess = undefined;
+      trackedPid = undefined;
+      clearPid();
       log(`DSH 服务进程已退出 (code=${code} signal=${signal})`, code === 0 ? 'info' : 'warn');
       pushStatus();
     });
@@ -541,12 +643,29 @@ function startServer(source: string): void {
 }
 
 function stopServer(): void {
-  if (!serverProcess) {
+  const pid = serverProcess?.pid ?? trackedPid;
+  if (!pid) {
     log('当前没有由本扩展启动的服务进程', 'warn');
     return;
   }
-  log('正在停止 DSH 服务进程…');
-  serverProcess.kill();
+  if (!isProcessAlive(pid)) {
+    // 进程已不在，清理过期记录
+    serverProcess = undefined;
+    trackedPid = undefined;
+    clearPid();
+    log('服务进程已不在运行（记录已清理）', 'warn');
+    pushStatus();
+    return;
+  }
+  log(`正在停止 DSH 服务进程 (PID ${pid})…`);
+  killServerTree(pid);
+  if (!serverProcess) {
+    // 遗留进程（无 exit 事件可依赖）：taskkill 同步结束后直接清理记录
+    trackedPid = undefined;
+    clearPid();
+    pushStatus();
+    log('已停止先前会话遗留的 DSH 服务进程');
+  }
 }
 
 // ------------------------------------------------------------ 状态与轮询
@@ -599,8 +718,8 @@ async function pollOnce(): Promise<void> {
 }
 
 function maybeAutoStart(): void {
-  if (serverProcess) {
-    return; // 已有进程在启动中/运行中
+  if (serverProcess || (trackedPid !== undefined && isProcessAlive(trackedPid))) {
+    return; // 已有进程在启动中/运行中（含先前会话遗留）
   }
   if (!getAutoStart()) {
     return;
