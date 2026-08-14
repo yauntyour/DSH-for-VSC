@@ -2,7 +2,7 @@
   "name": "dsh-for-vsc",
   "displayName": "DSH for VSC",
   "description": "将 DSH WebUI (http://127.0.0.1:3080) 嵌入 VS Code：Webview 面板 + 侧边栏控制台（状态/运行日志）+ 服务离线自动启动。",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "publisher": "dsh",
   "license": "MIT",
   "engines": {
@@ -26,7 +26,8 @@
     "onCommand:dsh.reload",
     "onCommand:dsh.openExternal",
     "onCommand:dsh.startServer",
-    "onCommand:dsh.stopServer"
+    "onCommand:dsh.stopServer",
+    "onCommand:dsh.restartServer"
   ],
   "contributes": {
     "viewsContainers": {
@@ -72,6 +73,11 @@
         "command": "dsh.stopServer",
         "title": "DSH: Stop Server",
         "icon": "$(debug-stop)"
+      },
+      {
+        "command": "dsh.restartServer",
+        "title": "DSH: Restart Server",
+        "icon": "$(debug-restart)"
       }
     ],
     "menus": {
@@ -93,6 +99,11 @@
         },
         {
           "command": "dsh.stopServer",
+          "when": "view == dsh.dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "dsh.restartServer",
           "when": "view == dsh.dashboard",
           "group": "navigation"
         }

@@ -38,6 +38,8 @@ let serverOutput: vscode.OutputChannel;
 // 本扩展拉起的服务进程 PID 的持久化位置与记录（跨 VS Code 会话，用于清理遗留/孤儿进程）
 let pidFile: string | undefined;
 let trackedPid: number | undefined;
+// 重启流程标记：非空表示「停止旧进程后需立即拉起新进程」，值为触发来源
+let restartSource: string | undefined;
 let dashboard: vscode.WebviewView | undefined;
 const logEntries: LogEntry[] = [];
 
@@ -77,6 +79,7 @@ export function activate(context: vscode.ExtensionContext): void {
     }),
     vscode.commands.registerCommand('dsh.startServer', () => startServer('手动')),
     vscode.commands.registerCommand('dsh.stopServer', () => stopServer()),
+    vscode.commands.registerCommand('dsh.restartServer', () => restartServer('手动')),
     // 配置变更时立即生效
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('dsh')) {
@@ -278,6 +281,9 @@ class DshDashboardProvider implements vscode.WebviewViewProvider {
           case 'stopServer':
             stopServer();
             break;
+          case 'restartServer':
+            restartServer('侧边栏');
+            break;
           case 'retry':
             online = false;
             renderPanel();
@@ -374,6 +380,7 @@ function getDashboardHtml(): string {
     <button id="external" class="sec">浏览器</button>
     <button id="start">启动服务</button>
     <button id="stop" class="sec">停止服务</button>
+    <button id="restart" class="sec">重启服务</button>
   </div>
   <div class="sec-title">设置</div>
   <div class="settings">
@@ -397,6 +404,7 @@ function getDashboardHtml(): string {
     urlEl.textContent = s.url;
     $('start').style.display = s.online ? 'none' : '';
     $('stop').style.display = s.running ? '' : 'none';
+    $('restart').style.display = s.running ? '' : 'none';
     $('autoStart').checked = !!s.autoStart;
     const cmdInput = $('startCommand');
     if (document.activeElement !== cmdInput && cmdInput.value !== (s.startCommand || '')) {
@@ -428,6 +436,7 @@ function getDashboardHtml(): string {
   $('external').onclick = () => vscode.postMessage({ type: 'openExternal' });
   $('start').onclick = () => vscode.postMessage({ type: 'startServer' });
   $('stop').onclick = () => vscode.postMessage({ type: 'stopServer' });
+  $('restart').onclick = () => vscode.postMessage({ type: 'restartServer' });
   $('autoStart').onchange = (e) => vscode.postMessage({ type: 'setAutoStart', value: e.target.checked });
   const saveCmd = () => vscode.postMessage({ type: 'setStartCommand', value: $('startCommand').value });
   $('saveCmd').onclick = saveCmd;
@@ -629,11 +638,21 @@ function startServer(source: string): void {
     });
     proc.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
       serverOutput.appendLine(`[DSH] 服务进程退出 (code=${code} signal=${signal})`);
+      if (serverProcess !== proc) {
+        return; // 迟到/重复的退出事件（重启流程已由新进程接管），忽略
+      }
       serverProcess = undefined;
       trackedPid = undefined;
       clearPid();
       log(`DSH 服务进程已退出 (code=${code} signal=${signal})`, code === 0 ? 'info' : 'warn');
       pushStatus();
+      if (restartSource) {
+        // 重启流程：旧进程已退出，立即拉起新进程
+        const src = restartSource;
+        restartSource = undefined;
+        log(`[${src}] 旧服务进程已退出，正在重新启动…`);
+        startServer(src);
+      }
     });
   } catch (err) {
     log(`启动 DSH 服务时发生异常: ${String(err)}`, 'error');
@@ -665,6 +684,47 @@ function stopServer(): void {
     clearPid();
     pushStatus();
     log('已停止先前会话遗留的 DSH 服务进程');
+  }
+}
+
+// 重启服务：先整树终止当前进程（复用停止逻辑），再立即拉起新进程
+function restartServer(source: string): void {
+  const pid = serverProcess?.pid ?? trackedPid;
+  if (!pid || !isProcessAlive(pid)) {
+    // 进程未在运行：直接启动即可
+    startServer(source);
+    return;
+  }
+  if (restartSource) {
+    log('服务重启已在进行中，请稍候', 'warn');
+    return;
+  }
+  restartSource = source;
+  log(`[${source}] 正在重启 DSH 服务 (PID ${pid})…`);
+  killServerTree(pid);
+  if (serverProcess) {
+    // 当前会话进程：由 exit 事件触发重新启动；5 秒兜底，防止进程未按时退出
+    setTimeout(() => {
+      if (!restartSource || !serverProcess) {
+        return; // 已通过 exit 事件完成重启
+      }
+      const src = restartSource;
+      restartSource = undefined;
+      killServerTree(serverProcess.pid);
+      serverProcess = undefined;
+      trackedPid = undefined;
+      clearPid();
+      pushStatus();
+      log('旧进程未及时退出，已强制清理并继续重启', 'warn');
+      startServer(src);
+    }, 5000);
+  } else {
+    // 遗留进程（无 exit 事件可依赖）：taskkill 同步结束后直接重启
+    restartSource = undefined;
+    trackedPid = undefined;
+    clearPid();
+    pushStatus();
+    startServer(source);
   }
 }
 
