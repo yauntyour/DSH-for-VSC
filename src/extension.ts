@@ -70,7 +70,11 @@ export function activate(context: vscode.ExtensionContext): void {
     vscode.commands.registerCommand('dsh.open', () => openPanel(context)),
     vscode.commands.registerCommand('dsh.reload', () => {
       if (panel) {
-        panel.dispose();
+        try {
+          panel.dispose();
+        } catch {
+          /* 面板可能已销毁 */
+        }
       }
       openPanel(context);
     }),
@@ -144,11 +148,24 @@ function log(text: string, level: LogEntry['level'] = 'info'): void {
     logEntries.shift();
   }
   output.appendLine(`[${entry.time}] ${text}`);
-  dashboard?.webview.postMessage({ type: 'log', entry });
+  postToDashboard({ type: 'log', entry });
+}
+
+// 向侧边栏 webview 安全投递消息：webview 已销毁时静默清理引用，
+// 避免轮询/日志循环中反复抛出 "Webview is disposed"
+function postToDashboard(message: unknown): void {
+  if (!dashboard) {
+    return;
+  }
+  try {
+    dashboard.webview.postMessage(message);
+  } catch {
+    dashboard = undefined;
+  }
 }
 
 function pushStatus(): void {
-  dashboard?.webview.postMessage({
+  postToDashboard({
     type: 'status',
     online,
     url: getWebuiUrl(),
@@ -268,7 +285,11 @@ class DshDashboardProvider implements vscode.WebviewViewProvider {
             break;
           case 'reload':
             if (panel) {
-              panel.dispose();
+              try {
+                panel.dispose();
+              } catch {
+                /* 面板可能已销毁 */
+              }
             }
             openPanel(this.context);
             break;
@@ -323,8 +344,12 @@ class DshDashboardProvider implements vscode.WebviewViewProvider {
     });
     // 视图就绪后推送当前状态与历史日志
     pushStatus();
-    for (const entry of logEntries) {
-      webviewView.webview.postMessage({ type: 'log', entry });
+    try {
+      for (const entry of logEntries) {
+        webviewView.webview.postMessage({ type: 'log', entry });
+      }
+    } catch {
+      // 视图在解析过程中已被销毁，忽略
     }
   }
 }
@@ -452,8 +477,12 @@ function getDashboardHtml(): string {
 
 function openPanel(context: vscode.ExtensionContext): void {
   if (panel) {
-    panel.reveal(vscode.ViewColumn.Active);
-    return;
+    try {
+      panel.reveal(vscode.ViewColumn.Active);
+      return;
+    } catch {
+      panel = undefined; // 引用已失效，走重建流程
+    }
   }
   panel = vscode.window.createWebviewPanel(VIEW_TYPE, VIEW_TITLE, vscode.ViewColumn.Active, {
     enableScripts: true,
@@ -497,7 +526,12 @@ function renderPanel(): void {
   }
   const url = getWebuiUrl();
   panel.title = online ? VIEW_TITLE : `${VIEW_TITLE} · 离线`;
-  panel.webview.html = buildHtml(url, online);
+  try {
+    panel.webview.html = buildHtml(url, online);
+  } catch {
+    // Webview 面板已被销毁（如用户刚关闭面板、扩展宿主重建等），丢弃引用，下次打开时重建
+    panel = undefined;
+  }
 }
 
 function buildHtml(url: string, isOnline: boolean): string {
