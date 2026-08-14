@@ -1,0 +1,137 @@
+{
+  "name": "dsh-for-vsc",
+  "displayName": "DSH for VSC",
+  "description": "将 DSH WebUI (http://127.0.0.1:3080) 嵌入 VS Code：Webview 面板 + 侧边栏控制台（状态/运行日志）+ 服务离线自动启动。",
+  "version": "0.1.0",
+  "publisher": "dsh",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "dsh",
+    "webui",
+    "webview",
+    "agent",
+    "deepseek"
+  ],
+  "main": "./out/extension.js",
+  "activationEvents": [
+    "onStartupFinished",
+    "onView:dsh.dashboard",
+    "onCommand:dsh.open",
+    "onCommand:dsh.reload",
+    "onCommand:dsh.openExternal",
+    "onCommand:dsh.startServer",
+    "onCommand:dsh.stopServer"
+  ],
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "dsh",
+          "title": "DSH",
+          "icon": "media/deepseek-whale.svg"
+        }
+      ]
+    },
+    "views": {
+      "dsh": [
+        {
+          "type": "webview",
+          "id": "dsh.dashboard",
+          "name": "DSH 控制台"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "dsh.open",
+        "title": "DSH: Open WebUI",
+        "icon": "$(globe)"
+      },
+      {
+        "command": "dsh.reload",
+        "title": "DSH: Reload WebUI",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "dsh.openExternal",
+        "title": "DSH: Open in Browser",
+        "icon": "$(open-external)"
+      },
+      {
+        "command": "dsh.startServer",
+        "title": "DSH: Start Server",
+        "icon": "$(play)"
+      },
+      {
+        "command": "dsh.stopServer",
+        "title": "DSH: Stop Server",
+        "icon": "$(debug-stop)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "dsh.open",
+          "when": "view == dsh.dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "dsh.reload",
+          "when": "view == dsh.dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "dsh.startServer",
+          "when": "view == dsh.dashboard",
+          "group": "navigation"
+        },
+        {
+          "command": "dsh.stopServer",
+          "when": "view == dsh.dashboard",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "DSH",
+      "properties": {
+        "dsh.webuiUrl": {
+          "type": "string",
+          "default": "http://127.0.0.1:3080/",
+          "scope": "window",
+          "description": "DSH WebUI 服务地址，扩展会把该页面嵌入 VS Code Webview 面板。"
+        },
+        "dsh.autoStart": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "description": "检测到 DSH 服务离线时，自动以 VS Code 后台任务方式启动服务（默认命令: dsh web）。"
+        },
+        "dsh.startCommand": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "description": "启动 DSH 服务的完整命令，留空自动检测：PATH 中有 dsh 时用 \"dsh web\"，否则用 \"npx @deepseek-ai/dsh web\"。示例: dsh web / dsh --profile web --port 3080"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "package": "vsce package --allow-missing-repository --no-dependencies"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "@types/vscode": "^1.85.0",
+    "@vscode/vsce": "^3.9.2",
+    "typescript": "^5.5.0"
+  }
+}

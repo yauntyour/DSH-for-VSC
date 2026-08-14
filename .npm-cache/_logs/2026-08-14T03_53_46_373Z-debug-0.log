@@ -1,0 +1,63 @@
+0 verbose cli D:\x64\nodejs\node.exe D:\x64\nodejs\node_modules\npm\bin\npm-cli.js
+1 info using npm@11.19.0
+2 info using node@v26.7.0
+3 silly config load:file:D:\x64\nodejs\node_modules\npm\npmrc
+4 silly config load:file:D:\Developments\ext\DSH for VSC\.npmrc
+5 silly config load:file:C:\Users\yaunt\.npmrc
+6 silly config load:file:C:\Users\yaunt\AppData\Roaming\npm\etc\npmrc
+7 verbose title npm install
+8 verbose argv "install" "--no-audit" "--no-fund" "--cache" "D:\\Developments\\ext\\DSH for VSC\\.npm-cache"
+9 verbose logfile logs-max:10 dir:D:\Developments\ext\DSH for VSC\.npm-cache\_logs\2026-08-14T03_53_46_373Z-
+10 verbose logfile D:\Developments\ext\DSH for VSC\.npm-cache\_logs\2026-08-14T03_53_46_373Z-debug-0.log
+11 silly logfile done cleaning log files
+12 silly packumentCache heap:4395630592 maxSize:1098907648 maxEntrySize:549453824
+13 silly idealTree buildDeps
+14 silly fetch manifest @types/node@^20.14.0
+15 silly packumentCache full:https://registry.npmmirror.com/@types%2fnode cache-miss
+16 http fetch GET 200 https://registry.npmmirror.com/npm 110ms
+17 http fetch GET 200 https://registry.npmmirror.com/@types%2fnode 278ms (cache miss)
+18 silly packumentCache full:https://registry.npmmirror.com/@types%2fnode set size:1167272 disposed:false
+19 silly fetch manifest @types/vscode@^1.85.0
+20 silly packumentCache full:https://registry.npmmirror.com/@types%2fvscode cache-miss
+21 http fetch GET 200 https://registry.npmmirror.com/@types%2fvscode 30ms (cache miss)
+22 silly packumentCache full:https://registry.npmmirror.com/@types%2fvscode set size:53472 disposed:false
+23 silly fetch manifest typescript@^5.5.0
+24 silly packumentCache full:https://registry.npmmirror.com/typescript cache-miss
+25 http fetch GET 200 https://registry.npmmirror.com/typescript 149ms (cache miss)
+26 silly packumentCache full:https://registry.npmmirror.com/typescript set size:1704230 disposed:false
+27 silly placeDep ROOT @types/node@20.19.43 OK for: dsh-for-vsc@0.1.0 want: ^20.14.0
+28 silly placeDep ROOT @types/vscode@1.125.0 OK for: dsh-for-vsc@0.1.0 want: ^1.85.0
+29 silly placeDep ROOT typescript@5.9.3 OK for: dsh-for-vsc@0.1.0 want: ^5.5.0
+30 silly fetch manifest undici-types@~6.21.0
+31 silly packumentCache full:https://registry.npmmirror.com/undici-types cache-miss
+32 http fetch GET 200 https://registry.npmmirror.com/undici-types 22ms (cache miss)
+33 silly packumentCache full:https://registry.npmmirror.com/undici-types set size:47441 disposed:false
+34 silly placeDep ROOT undici-types@6.21.0 OK for: @types/node@20.19.43 want: ~6.21.0
+35 silly reify moves {}
+36 http cache undici-types@https://registry.npmmirror.com/undici-types/-/undici-types-6.21.0.tgz 0ms (cache hit)
+37 http cache @types/node@https://registry.npmmirror.com/@types/node/-/node-20.19.43.tgz 0ms (cache hit)
+38 http cache typescript@https://registry.npmmirror.com/typescript/-/typescript-5.9.3.tgz 0ms (cache hit)
+39 http cache @types/vscode@https://registry.npmmirror.com/@types/vscode/-/vscode-1.125.0.tgz 0ms (cache hit)
+40 silly tarball no local data for undici-types@https://registry.npmmirror.com/undici-types/-/undici-types-6.21.0.tgz. Extracting by manifest.
+41 silly tarball no local data for @types/node@https://registry.npmmirror.com/@types/node/-/node-20.19.43.tgz. Extracting by manifest.
+42 silly tarball no local data for typescript@https://registry.npmmirror.com/typescript/-/typescript-5.9.3.tgz. Extracting by manifest.
+43 silly tarball no local data for @types/vscode@https://registry.npmmirror.com/@types/vscode/-/vscode-1.125.0.tgz. Extracting by manifest.
+44 http fetch GET 200 https://cdn.npmmirror.com/packages/%40types/vscode/1.125.0/vscode-1.125.0.tgz 176ms (cache miss)
+45 http fetch GET 200 https://cdn.npmmirror.com/packages/undici-types/6.21.0/undici-types-6.21.0.tgz 179ms (cache miss)
+46 http fetch GET 200 https://cdn.npmmirror.com/packages/%40types/node/20.19.43/node-20.19.43.tgz 228ms (cache miss)
+47 http fetch GET 200 https://cdn.npmmirror.com/packages/typescript/5.9.3/typescript-5.9.3.tgz 497ms (cache miss)
+48 silly ADD node_modules/undici-types
+49 silly ADD node_modules/typescript
+50 silly ADD node_modules/@types/vscode
+51 silly ADD node_modules/@types/node
+52 verbose cwd D:\Developments\ext\DSH for VSC
+53 verbose os Windows_NT 10.0.26100
+54 verbose node v26.7.0
+55 verbose npm  v11.19.0
+56 notice
+56 notice New major version of npm available! 11.19.0 -> 12.0.2
+56 notice Changelog: https://github.com/npm/cli/releases/tag/v12.0.2
+56 notice To update run: npm install -g npm@12.0.2
+56 notice  { force: true, Symbol(proc-log.meta): true }
+57 verbose exit 0
+58 info ok
